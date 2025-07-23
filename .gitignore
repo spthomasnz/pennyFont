@@ -1,0 +1,6 @@
+.venv/
+*.svg
+*.ttf
+*.woff2
+.idea/
+.git/
