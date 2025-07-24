@@ -126,8 +126,13 @@ class GlyphToSVGPath(object):
 
     svg_template = """<path style="{}" d="{}" />"""
 
-    def __init__(self, outline: freetype.Outline, offset=(0, 0), style: Optional[dict]=None):
+    def __init__(self, face, size, char, style: Optional[dict]=None):
         
+        face.set_char_size(size)
+
+        face.load_char(char, freetype.FT_LOAD_DEFAULT | #type:ignore
+                freetype.FT_LOAD_NO_BITMAP)  # type: ignore
+
         if style is None:
             self.style = {"fill": "none", 'stroke': 'black', 'stroke-width': 2}
         else:
@@ -135,9 +140,9 @@ class GlyphToSVGPath(object):
 
         self.moves: list[SVGMoveBase] = []
 
-        self.outline = outline
+        self.outline = face.glyph.outline
 
-        outline.decompose(move_to=self.move_to,
+        self.outline.decompose(move_to=self.move_to,
                           line_to=self.line_to,
                           conic_to=self.conic_to,
                           cubic_to=self.cubic_to)
@@ -146,7 +151,7 @@ class GlyphToSVGPath(object):
         return " ".join([f"{k}:{v};" for k, v in self.style.items()])
 
     def get_moves(self):
-        return " ".join([m.svg_move() for m in self.moves])
+        return " ".join([m.svg_move() for m in self.moves]) + " Z"
 
     def move_to(self, a, _):
         a_point = Point(a.x, a.y)
@@ -182,11 +187,11 @@ class GlyphToSVGPath(object):
 
 if __name__ == '__main__':
     face = freetype.Face('pokemon_solid-webfont.ttf')
-    face.set_char_size(18*64)
-    face.load_char('T', freetype.FT_LOAD_DEFAULT | #type:ignore
-                   freetype.FT_LOAD_NO_BITMAP)  # type: ignore
 
-    outer_glyph = GlyphToSVGPath(face.glyph.outline, style={"fill": "rgb(52, 92, 161)", 'stroke': 'none'})
+    outer_glyph = GlyphToSVGPath(face=face,
+                                 size=500,
+                                 char="S",
+                                 style={"fill": "rgb(52, 92, 161)", 'stroke': 'none'})
 
     # invert y
     outer_glyph.transform([1, 0, 0, 0, -1, 0])
@@ -195,51 +200,14 @@ if __name__ == '__main__':
     x_min, x_max, y_min, y_max = outer_glyph.bbox()   
     outer_glyph.transform([1, 0, -x_min, 0, 1, -y_min])
 
-    # scale height to 500
-    height = x_max - x_min
-    scale = 500/height
-    outer_glyph.transform([scale, 0, 0, 0, scale, 0])
-    
-    inner_glyph = GlyphToSVGPath(face.glyph.outline, style={"fill": "rgb(249, 201, 50)"})
-
-    # invert y
-    inner_glyph.transform([1, 0, 0, 0, -1, 0])
-
-    # shift minimum bounds to origin
-    x_min, x_max, y_min, y_max = inner_glyph.bbox()   
-    inner_glyph.transform([1, 0, -x_min, 0, 1, -y_min])
-
-    # scale height to smaller
-    smaller = 0.8
-    height = x_max - x_min
-    scale = (500*smaller)/height
-    inner_glyph.transform([scale, 0, 0, 0, scale, 0])
-
-    x_min, x_max, y_min, y_max = outer_glyph.bbox() 
-    outer_center_x = x_max/2
-    outer_center_y = y_max/2
-
-    x_min, x_max, y_min, y_max = inner_glyph.bbox() 
-    inner_center_x = x_max/2
-    inner_center_y = y_max/2
-
-    inner_x_shift = outer_center_x - inner_center_x
-    inner_y_shift = outer_center_y - inner_center_y
-
-    inner_glyph.transform([1, 0, inner_x_shift, 0, 1, inner_y_shift])
 
 
     svg_template = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
     <svg xmlns="http://www.w3.org/2000/svg">
-      <g>
-        {}
-      </g>
+            {}
     </svg>
     """
-
-    m = "\n\t\t".join([outer_glyph.svg_path(), inner_glyph.svg_path()])
-
-    svg = (svg_template.format(m))
+    svg = (svg_template.format(outer_glyph.svg_path()))
 
     with open("glyph.svg", "w") as f:
         f.write(svg)
