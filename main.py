@@ -1,10 +1,20 @@
-import os
-import sys
-
-sys.path.append(os.path.dirname(__file__))
-sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
-
 import freetype
+import itertools
+from typing import Union, Optional
+
+type Numeric = Union[int, float]
+
+def minmax(it) -> tuple[Numeric, Numeric]:
+    min = max = None
+    for val in it:
+        if min is None or val < min:
+            min = val
+        if max is None or val > max:
+            max = val
+
+    if min is None or max is None:
+        raise ValueError
+    return min, max
 
 class Point:
     def __init__(self, x, y):
@@ -21,66 +31,203 @@ class Point:
         self.y = new_y
 
 
-
 class SVGMoveBase(object):
-
-    def get_str(self):
+    def __init__(self) -> None:
         raise NotImplementedError
 
-    def transform(self, t):
+    def svg_move(self) -> str:
         raise NotImplementedError
+
+    def transform(self, t) -> None:
+        raise NotImplementedError
+
+    def x_coords(self):
+        raise NotImplementedError
+
+    def y_coords(self):
+        raise NotImplementedError
+
 
 class SVGMoveTo(SVGMoveBase):
-    def __init__(self):
-        pass
+    def __init__(self, a):
+        self.a = a
 
     def transform(self, t):
-        pass
+        self.a.transform(t)
+
+    def svg_move(self):
+        return f"M {self.a.x:.3f},{self.a.y:.3f}"
+
+    def x_coords(self):
+        return [self.a.x]
+
+    def y_coords(self):
+        return [self.a.y]
+
+
+class SVGLineTo(SVGMoveBase):
+    def __init__(self, a):
+        self.a = a
+
+    def transform(self, t):
+        self.a.transform(t)
+
+    def svg_move(self):
+        return f"L {self.a.x:.3f},{self.a.y:.3f}"
+
+    def x_coords(self):
+        return [self.a.x]
+
+    def y_coords(self):
+        return [self.a.y]
+
+
+class SVGConicTo(SVGMoveBase):
+    def __init__(self, a, b):
+        self.a = a
+        self.b = b
+
+    def transform(self, t):
+        self.a.transform(t)
+        self.b.transform(t)
+
+    def svg_move(self):
+        return f"Q {self.a.x:.3f},{self.a.y:.3f} {self.b.x:.3f},{self.b.y:.3f}"
+
+    def x_coords(self):
+        return [self.a.x, self.b.x]
+
+    def y_coords(self):
+        return [self.a.y, self.b.y]
+
+
+class SVGCubicTo(SVGMoveBase):
+    def __init__(self, a, b, c):
+        self.a = a
+        self.b = b
+        self.c = c
+
+    def transform(self, t):
+        self.a.transform(t)
+        self.b.transform(t)
+        self.c.transform(t)
+
+    def svg_move(self):
+        return f"C {self.a.x:.3f},{self.a.y:.3f} {self.b.x:.3f},{self.b.y:.3f} {self.c.x:.3f},{self.c.y:.3f}"
+
+    def x_coords(self):
+        return [self.a.x, self.b.x, self.c.x]
+
+    def y_coords(self):
+        return [self.a.y, self.b.y, self.c.y]
 
 
 class GlyphToSVGPath(object):
 
-    svg_template = """<path style="fill:none;stroke:#000000;stroke-width:2;" d="{}" />"""
+    svg_template = """<path style="{}" d="{}" />"""
 
-    def __init__(self, outline: freetype.Outline, offset=(0, 0)):
-        self.moves = []
+    def __init__(self, outline: freetype.Outline, offset=(0, 0), style: Optional[dict]=None):
+        
+        if style is None:
+            self.style = {"fill": "none", 'stroke': 'black', 'stroke-width': 2}
+        else:
+            self.style = style
+
+        self.moves: list[SVGMoveBase] = []
 
         self.outline = outline
-
-        bbox = outline.get_bbox()
-
-        self.width = bbox.xMax - bbox.xMin
-        self.x_offset = -bbox.xMin + offset[0]
-
-        self.y_max = bbox.yMax
 
         outline.decompose(move_to=self.move_to,
                           line_to=self.line_to,
                           conic_to=self.conic_to,
                           cubic_to=self.cubic_to)
 
+    def get_style(self):
+        return " ".join([f"{k}:{v};" for k, v in self.style.items()])
+
+    def get_moves(self):
+        return " ".join([m.svg_move() for m in self.moves])
+
     def move_to(self, a, _):
-        self.moves.append("M {},{}".format(a.x + self.x_offset, self.y_max - a.y))
+        a_point = Point(a.x, a.y)
+        self.moves.append(SVGMoveTo(a_point))
 
     def line_to(self, a, _):
-        self.moves.append("L {},{}".format(a.x + self.x_offset, self.y_max - a.y))
+        a_point = Point(a.x, a.y)
+        self.moves.append(SVGLineTo(a_point))
 
     def conic_to(self, a, b, _):
-        self.moves.append("Q {},{} {},{}".format(a.x + self.x_offset, self.y_max - a.y, b.x + self.x_offset, self.y_max - b.y))
+        a_point = Point(a.x, a.y)
+        b_point = Point(b.x, b.y)
+        self.moves.append(SVGConicTo(a_point, b_point))
 
     def cubic_to(self, a, b, c, _):
-        self.moves.append("C {},{} {},{} {},{}".format(a.x + self.x_offset, self.y_max - a.y, b.x + self.x_offset, self.y_max - b.y, c.x + self.x_offset, self.y_max - c.y))
+        a_point = Point(a.x, a.y)
+        b_point = Point(b.x, b.y)
+        c_point = Point(c.x, c.y)
+        self.moves.append(SVGCubicTo(a_point, b_point, c_point))
 
-    def path(self):
-        return self.svg_template.format(" ".join(self.moves))
+    def transform(self, t):
+        for m in self.moves:
+            m.transform(t)
+
+    def bbox(self) -> tuple[Numeric, Numeric, Numeric, Numeric]:
+        x_min, x_max = minmax(itertools.chain(*[move.x_coords() for move in self.moves]))
+        y_min, y_max = minmax(itertools.chain(*[move.y_coords() for move in self.moves]))
+        return (x_min, x_max, y_min, y_max)
+
+    def svg_path(self):
+        return self.svg_template.format(self.get_style(), self.get_moves())
 
 
 if __name__ == '__main__':
     face = freetype.Face('pokemon_solid-webfont.ttf')
     face.set_char_size(18*64)
-    face.load_char('T', freetype.FT_LOAD_DEFAULT | freetype.FT_LOAD_NO_BITMAP)
+    face.load_char('T', freetype.FT_LOAD_DEFAULT | #type:ignore
+                   freetype.FT_LOAD_NO_BITMAP)  # type: ignore
 
-    a = GlyphToSVGPath(face.glyph.outline)
+    outer_glyph = GlyphToSVGPath(face.glyph.outline, style={"fill": "rgb(52, 92, 161)", 'stroke': 'none'})
+
+    # invert y
+    outer_glyph.transform([1, 0, 0, 0, -1, 0])
+
+    # shift minimum bounds to origin
+    x_min, x_max, y_min, y_max = outer_glyph.bbox()   
+    outer_glyph.transform([1, 0, -x_min, 0, 1, -y_min])
+
+    # scale height to 500
+    height = x_max - x_min
+    scale = 500/height
+    outer_glyph.transform([scale, 0, 0, 0, scale, 0])
+    
+    inner_glyph = GlyphToSVGPath(face.glyph.outline, style={"fill": "rgb(249, 201, 50)"})
+
+    # invert y
+    inner_glyph.transform([1, 0, 0, 0, -1, 0])
+
+    # shift minimum bounds to origin
+    x_min, x_max, y_min, y_max = inner_glyph.bbox()   
+    inner_glyph.transform([1, 0, -x_min, 0, 1, -y_min])
+
+    # scale height to smaller
+    smaller = 0.8
+    height = x_max - x_min
+    scale = (500*smaller)/height
+    inner_glyph.transform([scale, 0, 0, 0, scale, 0])
+
+    x_min, x_max, y_min, y_max = outer_glyph.bbox() 
+    outer_center_x = x_max/2
+    outer_center_y = y_max/2
+
+    x_min, x_max, y_min, y_max = inner_glyph.bbox() 
+    inner_center_x = x_max/2
+    inner_center_y = y_max/2
+
+    inner_x_shift = outer_center_x - inner_center_x
+    inner_y_shift = outer_center_y - inner_center_y
+
+    inner_glyph.transform([1, 0, inner_x_shift, 0, 1, inner_y_shift])
+
 
     svg_template = """<?xml version="1.0" encoding="UTF-8" standalone="no"?>
     <svg xmlns="http://www.w3.org/2000/svg">
@@ -90,7 +237,9 @@ if __name__ == '__main__':
     </svg>
     """
 
+    m = "\n\t\t".join([outer_glyph.svg_path(), inner_glyph.svg_path()])
+
+    svg = (svg_template.format(m))
 
     with open("glyph.svg", "w") as f:
-        f.write(svg_template.format(a.path()))
-
+        f.write(svg)
