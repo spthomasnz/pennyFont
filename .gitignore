@@ -5,3 +5,4 @@
 .idea/
 .git/
 .vscode
+__pycache__/

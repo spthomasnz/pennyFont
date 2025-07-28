@@ -3,9 +3,9 @@ from shapely.affinity import affine_transform
 from typing import Union
 import itertools
 from typing import Optional
-import freetype
-from shapely.geometry import Polygon
+from shapely.geometry import Polygon, MultiPolygon
 from SVGMoves import *
+from matplotlib.path import Path
 
 # invert y co-ordinates per svg standard of origin being in the top-left corner
 def invert_y_svg(poly):
@@ -14,6 +14,9 @@ def invert_y_svg(poly):
 
 
 def poly_to_svg(poly, style=None):
+
+    if type(poly) is MultiPolygon:
+        return "\n\t".join([poly_to_svg(p, style=style) for p in poly.geoms])
 
     if style is None:
         style_str = ""
@@ -55,13 +58,7 @@ def minmax(it) -> tuple[Numeric, Numeric]:
 class GlyphToSVGPath(object):
     svg_template = """<path style="{}" d="{}" />"""
 
-    def __init__(self, face, size, char, style: Optional[dict] = None):
-
-        face.set_char_size(size)
-
-        face.load_char(char,
-                       freetype.FT_LOAD_DEFAULT |  # type:ignore
-                       freetype.FT_LOAD_NO_BITMAP)  # type: ignore
+    def __init__(self, outline, style: Optional[dict] = None):
 
         if style is None:
             self.style = {"fill": "none", 'stroke': 'black', 'stroke-width': 2}
@@ -70,7 +67,7 @@ class GlyphToSVGPath(object):
 
         self.moves: list[SVGMoveBase] = []
 
-        self.outline = face.glyph.outline
+        self.outline = outline
 
         self.outline.decompose(move_to=self.move_to,
                                line_to=self.line_to,
@@ -80,8 +77,9 @@ class GlyphToSVGPath(object):
         self.moves.append(SVGClosePolygon())
 
         # shift minimum bounds to origin
-        x_min, x_max, y_min, y_max = self.bbox()
-        self.transform([1, 0, -x_min, 0, 1, -y_min])
+        # x_min, x_max, y_min, y_max = self.bbox()
+        # self.transform([1, 0, -x_min, 0, 1, -y_min])
+        
 
     def get_style(self):
         return " ".join([f"{k}:{v};" for k, v in self.style.items()])
@@ -128,6 +126,10 @@ class GlyphToSVGPath(object):
         return self.svg_template.format(self.get_style(), self.get_moves())
 
     def mpl_path(self):
+
+        if len(self.moves) < 2:
+            return Path([(0, 0)])
+
         vertices, codes = zip(*[x.mpl_path() for x in self.moves])
 
         codes = list(itertools.chain(*codes))
@@ -138,6 +140,8 @@ class GlyphToSVGPath(object):
     def to_shapely(self):
         path = self.mpl_path()
         shapes = path.to_polygons()
-
-        return Polygon(shell=shapes[0],
-                       holes=shapes[1:])
+        if shapes:
+            return Polygon(shell=shapes[0],   #  type:ignore
+                           holes=shapes[1:])  #  type:ignore
+        else:
+            return Polygon()

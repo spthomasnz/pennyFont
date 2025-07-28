@@ -1,4 +1,5 @@
 from matplotlib.path import Path
+from abc import ABC, abstractmethod
 
 class Point:
     def __init__(self, x, y):
@@ -18,22 +19,24 @@ class Point:
         return self.x, self.y
 
 
-class SVGMoveBase(object):
-    def __init__(self) -> None:
-        raise NotImplementedError
-
+class SVGMoveBase(ABC):
+    @abstractmethod
     def svg_move(self) -> str:
         raise NotImplementedError
 
+    @abstractmethod
     def transform(self, t) -> None:
         raise NotImplementedError
 
+    @abstractmethod
     def x_coords(self):
         raise NotImplementedError
 
+    @abstractmethod
     def y_coords(self):
         raise NotImplementedError
 
+    @abstractmethod
     def mpl_path(self):
         raise NotImplementedError
 
