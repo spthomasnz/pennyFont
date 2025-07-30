@@ -2,10 +2,9 @@ import freetype
 from utils import *
 from shapely.affinity import translate, scale
 from typing import List
+from svgpath import GlyphPath
 
 face = freetype.Face("pokemon_solid-webfont.ttf")  # type:ignore
-
-
 
 text =  [x for x in "Mr & Mrs Fok Van Der Lee" if x!= " "]
 
@@ -13,12 +12,11 @@ text =  [x for x in "Mr & Mrs Fok Van Der Lee" if x!= " "]
 dpi = 96
 dpmm = dpi / 25.4
 
-
-
-
 text_height_mm = 150
 scale_factor = 1
 initial_size = (text_height_mm / scale_factor) * dpmm
+
+advance_scale = 1.5
 
 face.set_char_size(int(initial_size))
 
@@ -35,9 +33,9 @@ for letter in text:
                    freetype.FT_LOAD_NO_BITMAP)  # type: ignore
 
     # get desired glyph from face
-    glyph = GlyphToSVGPath(face.glyph.outline)
+    glyph = GlyphPath.from_outline(face.glyph.outline)
 
-    outer_poly = glyph.to_shapely()
+    outer_poly = glyph.shapely()
     
     #shift the descender to baseline (0)
     outer_poly = translate(outer_poly, yoff=-face.size.ascender)
@@ -58,25 +56,28 @@ for letter in text:
     outer_poly = translate(outer_poly, xoff=x_pos[-1])
     inner_poly = translate(inner_poly, xoff=x_pos[-1])
 
-    height = maxy - miny
-    max_height = max(height, max_height)
+    
+    max_height = max(maxy, max_height)
 
-    x_pos.append(x_pos[-1] + (face.glyph.advance.x * scale_factor * 1.4))
+    x_pos.append(x_pos[-1] + (face.glyph.advance.x * scale_factor * advance_scale))
 
     outer_paths.append(outer_poly)
     inner_paths.append(inner_poly)
 
-inner_paths = [translate(inner, yoff=max_height + y_spacing) for inner in inner_paths]
-max_height = max([poly.bounds[3] for poly in inner_paths])
+# inner_paths = [translate(inner, yoff=max_height + y_spacing) for inner in inner_paths]
+# max_height = max([poly.bounds[3] for poly in inner_paths])
 
+from shapely import union_all
 
-svg_paths = ["\n\t".join([poly_to_svg(outer, style={"fill": "rgb(52, 92, 161)"}), poly_to_svg(inner, style={"fill": "rgb(249, 201, 50)"})]) for outer, inner in zip(outer_paths, inner_paths)]
+inner = union_all(inner_paths)
+outer = union_all(outer_paths)
+
+svg_paths = [poly_to_svg(outer, style={"fill": "rgb(52, 92, 161)"}), poly_to_svg(inner, style={"fill": "rgb(249, 201, 50)"})]
 
 svg = "\n\t".join(svg_paths)
 
-
 svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="{outer_paths[-1].bounds[2]}" height="{max_height}">
+<svg xmlns="http://www.w3.org/2000/svg" width="{outer_paths[-1].bounds[2]/dpmm}mm" height="{max_height/dpmm}mm">
     {svg}
 </svg>
 """
@@ -84,3 +85,8 @@ svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 
 with open("glyph.svg", "w") as f:
     f.write(svg_template)
+
+
+print("SVG written.")
+print(f"Width:  {outer_paths[-1].bounds[2]/dpmm} mm")
+print(f"Height: {max_height/dpmm} mm")
