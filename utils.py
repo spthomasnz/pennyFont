@@ -3,13 +3,6 @@ from shapely.affinity import affine_transform
 from typing import Union
 from shapely.geometry import MultiPolygon
 
-
-# invert y co-ordinates per svg standard of origin being in the top-left corner
-def invert_y_svg(poly):
-    minx, miny, maxx, maxy = poly.bounds
-    return affine_transform(poly, [1, 0, 0, -1, 0, maxy + miny])
-
-
 def poly_to_svg(poly, style=None):
 
     if type(poly) is MultiPolygon:
