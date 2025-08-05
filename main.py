@@ -41,10 +41,8 @@ for letter in text:
     #shift the descender to baseline (0)
     outer_poly = translate(outer_poly, yoff=-face.size.ascender)
 
-    outer_poly = scale(outer_poly, yfact=-1.0, origin=(0, 0))
-
     # SVG has origin (0, 0) at the top left corner, so everything neds to be flipped in y and then shifted back to positive coordinates
-    # outer_poly = invert_y_svg(glyph_outline)
+    outer_poly = scale(outer_poly, yfact=-1.0, origin=(0, 0))
 
     # generate the smaller inner polygon
     inner_poly = outer_poly.buffer(-15)
