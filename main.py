@@ -6,7 +6,7 @@ from svgpath import GlyphPath
 
 face = freetype.Face("pokemon_solid-webfont.ttf")  # type:ignore
 
-text =  [x for x in "Mri & Mrs Fok Van Der Lee"]
+text =  [x for x in "SPHINX OF BLACK QUARTZ, JUDGE MY VOW"]
 
 
 dpi = 96
@@ -65,8 +65,7 @@ for letter in text:
     outer_paths.append(outer_poly)
     inner_paths.append(inner_poly)
 
-# inner_paths = [translate(inner, yoff=max_height + y_spacing) for inner in inner_paths]
-# max_height = max([poly.bounds[3] for poly in inner_paths])
+inner_paths = [translate(inner, yoff=max_height + y_spacing) for inner in inner_paths]
 
 from shapely import union_all
 
@@ -78,7 +77,7 @@ svg_paths = [poly_to_svg(outer, style={"fill": "rgb(52, 92, 161)"}), poly_to_svg
 svg = "\n\t".join(svg_paths)
 
 svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="{outer_paths[-1].bounds[2]/dpmm}mm" height="{max_height/dpmm}mm">
+<svg xmlns="http://www.w3.org/2000/svg" width="{outer.bounds[2]/dpmm}mm" height="{max(outer.bounds[3], inner.bounds[3])/dpmm}mm">
     {svg}
 </svg>
 """
