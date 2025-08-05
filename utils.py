@@ -34,16 +34,4 @@ def poly_to_svg(poly, style=None):
 
 type Numeric = Union[int, float]
 
-def minmax(it) -> tuple[Numeric, Numeric]:
-    local_min = local_max = None
-    for val in it:
-        if local_min is None or val < local_min:
-            local_min = val
-        if local_max is None or val > local_max:
-            local_max = val
-
-    if local_min is None or local_max is None:
-        raise ValueError
-    return local_min, local_max
-
 
