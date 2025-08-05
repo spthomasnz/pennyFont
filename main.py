@@ -6,7 +6,7 @@ from svgpath import GlyphPath
 
 face = freetype.Face("pokemon_solid-webfont.ttf")  # type:ignore
 
-text =  [x for x in "Mr & Mrs Fok Van Der Lee" if x!= " "]
+text =  [x for x in "Mri & Mrs Fok Van Der Lee"]
 
 
 dpi = 96
@@ -16,7 +16,7 @@ text_height_mm = 150
 scale_factor = 1
 initial_size = (text_height_mm / scale_factor) * dpmm
 
-advance_scale = 1.5
+advance_scale = 1.0
 
 face.set_char_size(int(initial_size))
 
@@ -35,7 +35,8 @@ for letter in text:
     # get desired glyph from face
     glyph = GlyphPath.from_outline(face.glyph.outline)
 
-    outer_poly = glyph.shapely()
+
+    outer_poly = glyph.shapely_polygon()
     
     #shift the descender to baseline (0)
     outer_poly = translate(outer_poly, yoff=-face.size.ascender)
@@ -82,10 +83,8 @@ svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
 </svg>
 """
 
-
 with open("glyph.svg", "w") as f:
     f.write(svg_template)
-
 
 print("SVG written.")
 print(f"Width:  {outer_paths[-1].bounds[2]/dpmm} mm")
