@@ -7,8 +7,7 @@ from utils import *
 from enum import Enum
 from abc import ABC, abstractmethod
 from dataclasses import dataclass
-import contextlib
-import ctypes
+
 
 @dataclass
 class BBox:
@@ -16,6 +15,11 @@ class BBox:
     xmax: Numeric
     ymin: Numeric
     ymax: Numeric
+
+@dataclass
+class Point:
+    x: Numeric
+    y: Numeric
 
 class PathBuilder():
     
@@ -48,9 +52,11 @@ class PathBuilder():
     
     def _process_linearring(self, linearring):
         if linearring.coords[:1]:
-            self._move_to(linearring.coords[0])
+            point = Point(*linearring.coords[0])
+            self._move_to(point)
         for coord in linearring.coords[1:]:
-            self._line_to(coord)
+            point = Point(*coord)
+            self._line_to(point)
 
 
     def __init__(self):
@@ -89,52 +95,16 @@ class PathBuilder():
 class GlyphPath(ABC):
     svg_template = """<path {} d="{}" />"""
 
-    class representations(Enum):
-        MPL_PATH = 1
-        SHAPELY_POLY = 2
-        EMPTY = 3
-
     @classmethod
     def from_outline(cls, outline: ft.Outline):
         path_builder = PathBuilder.from_outline(outline)
-        return GlyphPathMPL(path_builder.get_path())
+        return cls(path_builder.get_path())
     
     @classmethod
     def from_shapely(cls, shape: Union[Polygon, MultiPolygon]):
-        pass
-        # vertices = 
+        path_builder = PathBuilder.from_shapely(shape)
+        return cls(path_builder.get_path())
 
-    @classmethod
-    def _from_shapely_polygon(cls, polygon):
-        pass
-
-    @abstractmethod
-    def __init__(self):
-        pass
-
-    @abstractmethod
-    def transform(self, t) -> Self:
-        pass
-
-    @abstractmethod
-    def bbox(self) -> BBox:
-        pass
-
-    @abstractmethod
-    def mpl_path(self) -> Optional[MPLPath]:
-        pass
-
-    @abstractmethod
-    def svg(self,attributes: Optional[dict]) -> str:
-        pass
-
-    @abstractmethod
-    def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
-        pass
-
-
-class GlyphPathMPL(GlyphPath):
-    representation = GlyphPath.representations.MPL_PATH
 
     def __init__(self, path):
         # we're using matplptlib.path.Path as the internal representation of the path
@@ -179,13 +149,14 @@ class GlyphPathMPL(GlyphPath):
             attributes = {"stroke": "red",
                           "stroke-width": 2,
                           "fill": None}
-
+        
+        # assemble string per xml standard key1="value1" key2="value2"
         attributes_str = " ".join([f'{k}="{v}"' for k, v in attributes.items()])
 
+        # matplotlib path and SVG both use the same internal logical format of move/line/quadratic/cubic
         moves = []
-
         for vertices, code in self._path.iter_segments():
-        
+       
             match code:
                 case MPLPath.MOVETO:
                     x, y = vertices
@@ -224,7 +195,7 @@ class GlyphPathMPL(GlyphPath):
                 # get the previous polygon (the pevious exterior, with any interiors)
                 previous_polygon = polygons[-1]
 
-
+                # add this hole to the previous polygon
                 polygons[-1] = Polygon(shell=previous_polygon.exterior,
                                        holes = list(previous_polygon.interiors) + [lr])
             else:
@@ -252,14 +223,48 @@ if __name__ == "__main__":
 
     gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
 
-    import matplotlib.pyplot as plt
-    from shapely.plotting import plot_polygon
-    fig, ax = plt.subplots()
-    ax.axis('equal')   
-    plot_polygon(gp.shapely_polygon(), ax=ax, add_points=False, facecolor="#345ca1")
-    plot_polygon(gp.shapely_polygon().buffer(-500,), ax=ax, add_points=False, facecolor="#f9c932")
+    if True:
+        import matplotlib.pyplot as plt
+        from shapely.plotting import plot_polygon
+        from itertools import chain
+        from shapely import BufferCapStyle as BCS
+        from shapely import BufferJoinStyle as BJS
 
-    fig.show()
+        cap_styles  = [('round',  BCS.round),
+                       ('square', BCS.square),
+                       ('flat',   BCS.flat)]
+        join_styles = [('round',  BJS.round),
+                       ('mitre',  BJS.mitre),
+                       ('bevel',  BJS.bevel)]             
+        styles = [(x, y) for x in cap_styles for y in join_styles]
+
+        fig, axs = plt.subplots(nrows=3, ncols=3)
+        
+        for ((cap_desc, cap), (join_desc, join)), ax in zip(styles, chain.from_iterable(axs)):
+            ax.axis('equal')   
+            plot_polygon(gp.shapely_polygon(), ax=ax, add_points=False, facecolor="#345ca1")
+            plot_polygon(gp.shapely_polygon().buffer(-500, cap_style=cap, join_style=join), ax=ax, add_points=False, facecolor="#f9c932")
+            ax.set_title(f'cap_style={cap_desc} join_style={join_desc}')
+        fig.show()
+
+
+    if False:
+        a = gp.shapely_polygon()
+        
+        b = GlyphPath.from_shapely(a)
+
+        scale = 0.05
+        b = b.transform([-scale, 0, b.bbox().xmax*scale, 0, -scale, b.bbox().ymax*scale])
+
+
+        svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+        <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox().xmax}" height="{b.bbox().ymax}">
+            {b.svg(attributes={"fill": "rgb(52, 92, 161)"})}
+        </svg>
+        """
+
+        with open("glyphtest.svg", "w") as f:
+            f.write(svg_template)
 
     pass #exists to put a breakpoint on so gp can be interrogated
 
