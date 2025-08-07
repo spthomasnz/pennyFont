@@ -302,7 +302,7 @@ if __name__ == "__main__":
 
     gp = GlyphPath.from_outline(outline)
 
-    # gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
+    gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
 
     from shapely import BufferJoinStyle as BJS
 
@@ -322,6 +322,7 @@ if __name__ == "__main__":
         styles = [(x, y) for x in cap_styles for y in join_styles]
 
         fig, axs = plt.subplots(nrows=3, ncols=3)
+        fig.suptitle("Comparison of cap and join styles for shapely.buffer")
         
         for ((cap_desc, cap), (join_desc, join)), ax in zip(styles, chain.from_iterable(axs)):
             ax.axis('equal')   
@@ -333,12 +334,10 @@ if __name__ == "__main__":
 
     if True:
         a = gp.shapely_polygon()
-        
         b = GlyphPath.from_shapely(a)
 
         scale = 0.05
         b = b.transform([scale, 0, b.bbox().xmin*scale, 0, -scale, b.bbox().ymax*scale])
-
 
         svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox().xmax}" height="{b.bbox().ymax}">
