@@ -1,4 +1,9 @@
 import freetype as ft
+
+# disable mpl inteactive mode as we're only using mpl for the path module
+import matplotlib
+matplotlib.use('Agg')
+
 from matplotlib.path import Path as MPLPath
 from matplotlib.transforms import Affine2D
 from shapely.geometry import Polygon, LinearRing, MultiPolygon
@@ -307,6 +312,10 @@ if __name__ == "__main__":
     from shapely import BufferJoinStyle as BJS
 
     if True:
+
+        # re-enable mpl interactive mode
+        matplotlib.use("tkagg")
+
         import matplotlib.pyplot as plt
         from shapely.plotting import plot_polygon
         from itertools import chain
