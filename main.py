@@ -1,5 +1,5 @@
 import freetype
-from svgpath import GlyphPath
+from glyphpath import GlyphPath
 
 face = freetype.Face("pokemon_solid-webfont.ttf")  # type:ignore
 
