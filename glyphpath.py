@@ -1,15 +1,12 @@
 import freetype as ft
 
-# disable mpl inteactive mode as we're only using mpl for the path module
-import matplotlib
-matplotlib.use('Agg')
-
 from matplotlib.path import Path as MPLPath
 from matplotlib.transforms import Affine2D
 from shapely.geometry import Polygon, LinearRing, MultiPolygon
-from typing import Optional, Self, Union, Annotated, Iterable
+from typing import Optional, Self, Union, Annotated, Iterable, IO
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+
 
 from typing import Union
 type Numeric = Union[int, float]
@@ -20,6 +17,12 @@ class BBox:
     xmax: Numeric
     ymin: Numeric
     ymax: Numeric
+
+    def width(self) -> Numeric:
+        return self.xmax - self.xmin
+    
+    def height(self) -> Numeric:
+        return self.ymax - self.ymin
 
 @dataclass
 class Point:
@@ -152,7 +155,7 @@ class GlyphPath(GlyphPathBase):
     svg_template = """<path {} d="{}" />"""
 
     @classmethod
-    def from_outline(cls, outline: ft.Outline):
+    def from_outline(cls, outline: ft.Outline) -> GlyphPathBase:
         path_builder = PathBuilder.from_outline(outline)
         path = path_builder.get_path()
 
@@ -162,7 +165,7 @@ class GlyphPath(GlyphPathBase):
             return GlyphPathEmpty()
         
     @classmethod
-    def from_shapely(cls, shape: Union[Polygon, MultiPolygon], inverted:bool=False):
+    def from_shapely(cls, shape: Union[Polygon, MultiPolygon], inverted:bool=False) -> GlyphPathBase:
         path_builder = PathBuilder.from_shapely(shape)
 
         path = path_builder.get_path()
@@ -171,6 +174,28 @@ class GlyphPath(GlyphPathBase):
             return GlyphPath(path, inverted)
         else:
             return GlyphPathEmpty()
+
+    @classmethod
+    def from_face(cls, face: Union[str, IO, ft.Face], char:Annotated[str, 1], size:int) -> GlyphPathBase:
+        
+        typeface: ft.Face
+
+        if type(face) == IO or type(face) == str:
+            typeface = ft.Face(face)
+        elif type(face) == ft.Face:
+            typeface = face
+        else:
+            raise ValueError
+        
+        typeface.set_char_size(size)
+
+        typeface.load_char(char,
+                ft.FT_LOAD_DEFAULT |   # type:ignore
+                ft.FT_LOAD_NO_BITMAP)  # type: ignore
+
+        outline = typeface.glyph.outline
+
+        return GlyphPath.from_outline(outline)
 
     def __init__(self, path:MPLPath, inverted:bool=False):
         # we're using matplptlib.path.Path as the internal representation of the path
@@ -189,6 +214,7 @@ class GlyphPath(GlyphPathBase):
         new_inverted = self._inverted
 
         # if any of a, b, d, e are negative then the polygons become inverted and cw becomes ccw and ccw becomes cw.
+        # note that if an even number odf the coefficients are negative then it doubly inverts back to positive.
         for factor in [a, b, d, e]:
             if factor < 0:
                 new_inverted = not new_inverted
@@ -294,7 +320,8 @@ class GlyphPath(GlyphPathBase):
             return polygons[0]
         else:
             return MultiPolygon(polygons)
-        
+
+
 if __name__ == "__main__":
 
     face = ft.Face("pokemon_solid-webfont.ttf")
@@ -310,36 +337,6 @@ if __name__ == "__main__":
     gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
 
     from shapely import BufferJoinStyle as BJS
-
-    if True:
-
-        # re-enable mpl interactive mode
-        matplotlib.use("tkagg")
-
-        import matplotlib.pyplot as plt
-        from shapely.plotting import plot_polygon
-        from itertools import chain
-        from shapely import BufferCapStyle as BCS
-
-
-        cap_styles  = [('round',  BCS.round),
-                       ('square', BCS.square),
-                       ('flat',   BCS.flat)]
-        join_styles = [('round',  BJS.round),
-                       ('mitre',  BJS.mitre),
-                       ('bevel',  BJS.bevel)]             
-        styles = [(x, y) for x in cap_styles for y in join_styles]
-
-        fig, axs = plt.subplots(nrows=3, ncols=3)
-        fig.suptitle("Comparison of cap and join styles for shapely.buffer")
-        
-        for ((cap_desc, cap), (join_desc, join)), ax in zip(styles, chain.from_iterable(axs)):
-            ax.axis('equal')   
-            plot_polygon(gp.shapely_polygon(), ax=ax, add_points=False, facecolor="#345ca1")
-            plot_polygon(gp.shapely_polygon().buffer(-500, cap_style=cap, join_style=join), ax=ax, add_points=False, facecolor="#f9c932")
-            ax.set_title(f'cap_style={cap_desc} join_style={join_desc}')
-        fig.show()
-
 
     if True:
         a = gp.shapely_polygon()
