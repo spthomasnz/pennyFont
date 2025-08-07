@@ -3,13 +3,14 @@ import freetype as ft
 from matplotlib.path import Path as MPLPath
 from matplotlib.transforms import Affine2D
 from shapely.geometry import Polygon, LinearRing, MultiPolygon
-from typing import Optional, Self, Union, Annotated, Iterable, IO
+from typing import Optional, Self, Annotated, Iterable, BinaryIO
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
 
-
 from typing import Union
+
 type Numeric = Union[int, float]
+
 
 @dataclass
 class BBox:
@@ -20,17 +21,18 @@ class BBox:
 
     def width(self) -> Numeric:
         return self.xmax - self.xmin
-    
+
     def height(self) -> Numeric:
         return self.ymax - self.ymin
+
 
 @dataclass
 class Point:
     x: Numeric
     y: Numeric
 
-class PathBuilder():
-    
+
+class PathBuilder:
     @classmethod
     def from_outline(cls, outline) -> Self:
         pb = cls()
@@ -39,7 +41,7 @@ class PathBuilder():
                           conic_to=pb._conic_to,
                           cubic_to=pb._cubic_to)
         return pb
-        
+
     @classmethod
     def from_shapely(cls, shape) -> Self:
         pb = cls()
@@ -51,13 +53,12 @@ class PathBuilder():
                 pb._process_polygon(polygon)
 
         return pb
-      
 
     def _process_polygon(self, polygon):
         self._process_linearring(polygon.exterior)
         for interior in polygon.interiors:
             self._process_linearring(interior)
-    
+
     def _process_linearring(self, linearring):
         if linearring.coords[:1]:
             point = Point(*linearring.coords[0])
@@ -65,7 +66,6 @@ class PathBuilder():
         for coord in linearring.coords[1:]:
             point = Point(*coord)
             self._line_to(point)
-
 
     def __init__(self):
         self._vertices = []
@@ -86,13 +86,13 @@ class PathBuilder():
     def _conic_to(self, a, b, _=None):
         self._vertices.append((a.x, a.y))
         self._vertices.append((b.x, b.y))
-        self._codes.extend([MPLPath.CURVE3]*2)
+        self._codes.extend([MPLPath.CURVE3] * 2)
 
     def _cubic_to(self, a, b, c, _=None):
         self._vertices.append((a.x, a.y))
         self._vertices.append((b.x, b.y))
         self._vertices.append((c.x, c.y))
-        self._codes.extend([MPLPath.CURVE4]*3)
+        self._codes.extend([MPLPath.CURVE4] * 3)
 
     def get_path(self):
         if self._vertices:
@@ -100,17 +100,18 @@ class PathBuilder():
         else:
             return None
 
+
 class GlyphPathBase(ABC):
     @abstractmethod
     def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
         pass
 
     @abstractmethod
-    def scale(self, xfact:Numeric=1, yfact:Numeric=1) -> Self:
+    def scale(self, xfact: Numeric = 1, yfact: Numeric = 1) -> Self:
         pass
 
     @abstractmethod
-    def translate(self, xoff:Numeric=0, yoff:Numeric=0) -> Self:
+    def translate(self, xoff: Numeric = 0, yoff: Numeric = 0) -> Self:
         pass
 
     @abstractmethod
@@ -118,7 +119,7 @@ class GlyphPathBase(ABC):
         pass
 
     @abstractmethod
-    def svg(self, attributes: Optional[dict]=None) -> str:
+    def svg(self, attributes: Optional[dict] = None) -> str:
         pass
 
     @abstractmethod
@@ -129,20 +130,21 @@ class GlyphPathBase(ABC):
     def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
         pass
 
+
 class GlyphPathEmpty(GlyphPathBase):
     def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
         return type(self)()
 
-    def scale(self, xfact:Numeric=1, yfact:Numeric=1) -> Self:
+    def scale(self, xfact: Numeric = 1, yfact: Numeric = 1) -> Self:
         return type(self)()
 
-    def translate(self, xoff:Numeric=0, yoff:Numeric=0) -> Self:
+    def translate(self, xoff: Numeric = 0, yoff: Numeric = 0) -> Self:
         return type(self)()
 
     def bbox(self) -> BBox:
         return BBox(0, 0, 0, 0)
 
-    def svg(self, attributes: Optional[dict]=None) -> str:
+    def svg(self, attributes: Optional[dict] = None) -> str:
         return ""
 
     def buffer(self, distance: Numeric, **kwargs) -> Self:
@@ -150,6 +152,7 @@ class GlyphPathEmpty(GlyphPathBase):
 
     def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
         return Polygon()
+
 
 class GlyphPath(GlyphPathBase):
     svg_template = """<path {} d="{}" />"""
@@ -163,9 +166,9 @@ class GlyphPath(GlyphPathBase):
             return GlyphPath(path)
         else:
             return GlyphPathEmpty()
-        
+
     @classmethod
-    def from_shapely(cls, shape: Union[Polygon, MultiPolygon], inverted:bool=False) -> GlyphPathBase:
+    def from_shapely(cls, shape: Union[Polygon, MultiPolygon], inverted: bool = False) -> GlyphPathBase:
         path_builder = PathBuilder.from_shapely(shape)
 
         path = path_builder.get_path()
@@ -176,32 +179,32 @@ class GlyphPath(GlyphPathBase):
             return GlyphPathEmpty()
 
     @classmethod
-    def from_face(cls, face: Union[str, IO, ft.Face], char:Annotated[str, 1], size:int) -> GlyphPathBase:
-        
+    def from_face(cls, face: Union[str, BinaryIO, ft.Face], char: Annotated[str, 1], size: int) -> GlyphPathBase:
+
         typeface: ft.Face
 
-        if type(face) == IO or type(face) == str:
-            typeface = ft.Face(face)
-        elif type(face) == ft.Face:
+        if isinstance(face, BinaryIO) or isinstance(face, str):
+            typeface = ft.Face(face)  # type:ignore
+        elif isinstance(face, ft.Face):
             typeface = face
         else:
             raise ValueError
-        
+
         typeface.set_char_size(size)
 
         typeface.load_char(char,
-                ft.FT_LOAD_DEFAULT |   # type:ignore
-                ft.FT_LOAD_NO_BITMAP)  # type: ignore
+                           ft.FT_LOAD_DEFAULT |  # type:ignore
+                           ft.FT_LOAD_NO_BITMAP)  # type: ignore
 
         outline = typeface.glyph.outline
 
         return GlyphPath.from_outline(outline)
 
-    def __init__(self, path:MPLPath, inverted:bool=False):
-        # we're using matplptlib.path.Path as the internal representation of the path
+    def __init__(self, path: MPLPath, inverted: bool = False):
+        # we're using matplotlib.path.Path as the internal representation of the path
         self._path = path
         self._inverted = inverted
-    
+
     def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
 
         # transform the path per the following affine transform
@@ -231,12 +234,11 @@ class GlyphPath(GlyphPathBase):
                                          f=f)
 
         return type(self)(self._path.transformed(transform), inverted=new_inverted)
-    
 
-    def scale(self, xfact: Numeric=1.0, yfact: Numeric=1.0):
+    def scale(self, xfact: Numeric = 1.0, yfact: Numeric = 1.0):
         return self.transform([xfact, 0, 0, 0, yfact, 0])
-    
-    def translate(self, xoff:Numeric=0, yoff:Numeric=0):
+
+    def translate(self, xoff: Numeric = 0, yoff: Numeric = 0):
         return self.transform([1, 0, xoff, 0, 1, yoff])
 
     def bbox(self) -> BBox:
@@ -250,20 +252,20 @@ class GlyphPath(GlyphPathBase):
     def _mpl_path(self) -> MPLPath:
         return self._path
 
-    def svg(self, attributes: Optional[dict]=None) -> str:
+    def svg(self, attributes: Optional[dict] = None) -> str:
 
         if attributes is None:
             attributes = {"stroke": "red",
                           "stroke-width": 2,
                           "fill": None}
-        
+
         # assemble string per xml standard key1="value1" key2="value2"
         attributes_str = " ".join([f'{k}="{v}"' for k, v in attributes.items()])
 
         # matplotlib path and SVG both use the same internal logical format of move/line/quadratic/cubic
         moves = []
         for vertices, code in self._path.iter_segments():
-       
+
             match code:
                 case MPLPath.MOVETO:
                     x, y = vertices
@@ -297,23 +299,23 @@ class GlyphPath(GlyphPathBase):
         polygons = []
         for coords in coord_list:
             # make a shapely LinearRing so we can test direction
-            lr = LinearRing(coords) # type:ignore
+            lr = LinearRing(coords)  # type:ignore
 
             # TrueType font spec: clockwise contours are outlines, anti-clockwise contours are holes.
             # Any anti-clockwise contour is a hole for the previous clockwise contour.
             if ((not self._inverted) and lr.is_ccw) or (self._inverted and (not lr.is_ccw)):
                 # this coord list is for an interior hole belonging to the previous exterior
 
-                # get the previous polygon (the pevious exterior, with any interiors)
+                # get the previous polygon (the previous exterior, with any interiors)
                 previous_polygon = polygons[-1]
 
                 # add this hole to the previous polygon
                 polygons[-1] = Polygon(shell=previous_polygon.exterior,
-                                       holes = list(previous_polygon.interiors) + [lr])
+                                       holes=list(previous_polygon.interiors) + [lr])
             else:
                 # this coord list is for a new exterior
                 polygons.append(Polygon(lr))
-        
+
         if len(polygons) == 0:
             return Polygon()
         elif len(polygons) == 1:
@@ -324,37 +326,29 @@ class GlyphPath(GlyphPathBase):
 
 if __name__ == "__main__":
 
-    face = ft.Face("pokemon_solid-webfont.ttf")
-    face.set_char_size(15000)
-    face.load_char("8",
-                ft.FT_LOAD_DEFAULT |   # type:ignore
-                ft.FT_LOAD_NO_BITMAP)  # type: ignore
+    face = ft.Face("pokemon_solid-webfont.ttf")  # type:ignore
 
-    outline = face.glyph.outline
+    gp = GlyphPath.from_face(face, "8", 15000)
 
-    gp = GlyphPath.from_outline(outline)
+    gp = gp.transform([1, 0, -gp.bbox().xmin, 0, 1, -gp.bbox().ymin])
 
-    gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
-
-    from shapely import BufferJoinStyle as BJS
+    from shapely import BufferJoinStyle
 
     if True:
         a = gp.shapely_polygon()
         b = GlyphPath.from_shapely(a)
 
         scale = 0.05
-        b = b.transform([scale, 0, b.bbox().xmin*scale, 0, -scale, b.bbox().ymax*scale])
+        b = b.transform([scale, 0, b.bbox().xmin * scale, 0, -scale, b.bbox().ymax * scale])
 
         svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox().xmax}" height="{b.bbox().ymax}">
             {b.svg(attributes={"fill": "rgb(52, 92, 161)"})}
-            {b.buffer(-25, join_style=BJS.mitre).svg(attributes={"fill": "rgb(249, 201, 50)"})}
+            {b.buffer(-25, join_style=BufferJoinStyle.mitre).svg(attributes={"fill": "rgb(249, 201, 50)"})}
         </svg>
         """
 
         with open("glyphtest.svg", "w") as f:
             f.write(svg_template)
 
-    pass #exists to put a breakpoint on so gp can be interrogated
-
-
+    pass  # exists to put a breakpoint on so gp can be interrogated
