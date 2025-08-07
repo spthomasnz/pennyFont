@@ -1,11 +1,13 @@
 import freetype as ft
 from matplotlib.path import Path as MPLPath
 from matplotlib.transforms import Affine2D
-from shapely.geometry import Polygon, LinearRing
+from shapely.geometry import Polygon, LinearRing, MultiPolygon
 from typing import Optional, Self, Union, Annotated, Iterable
-from utils import *
 from dataclasses import dataclass
 from abc import ABC, abstractmethod
+
+from typing import Union
+type Numeric = Union[int, float]
 
 @dataclass
 class BBox:
