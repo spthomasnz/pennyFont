@@ -2,12 +2,10 @@ import freetype as ft
 from matplotlib.path import Path as MPLPath
 from matplotlib.transforms import Affine2D
 from shapely.geometry import Polygon, LinearRing
-from typing import Optional, Self, Union
+from typing import Optional, Self, Union, Annotated, Iterable
 from utils import *
-from enum import Enum
-from abc import ABC, abstractmethod
 from dataclasses import dataclass
-
+from abc import ABC, abstractmethod
 
 @dataclass
 class BBox:
@@ -24,7 +22,7 @@ class Point:
 class PathBuilder():
     
     @classmethod
-    def from_outline(cls, outline):
+    def from_outline(cls, outline) -> Self:
         pb = cls()
         outline.decompose(move_to=pb._move_to,
                           line_to=pb._line_to,
@@ -33,7 +31,7 @@ class PathBuilder():
         return pb
         
     @classmethod
-    def from_shapely(cls, shape):
+    def from_shapely(cls, shape) -> Self:
         pb = cls()
 
         if type(shape) is Polygon:
@@ -92,25 +90,87 @@ class PathBuilder():
         else:
             return None
 
-class GlyphPath(ABC):
+class GlyphPathBase(ABC):
+    @abstractmethod
+    def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
+        pass
+
+    @abstractmethod
+    def scale(self, xfact:Numeric=1, yfact:Numeric=1) -> Self:
+        pass
+
+    @abstractmethod
+    def translate(self, xoff:Numeric=0, yoff:Numeric=0) -> Self:
+        pass
+
+    @abstractmethod
+    def bbox(self) -> BBox:
+        pass
+
+    @abstractmethod
+    def svg(self, attributes: Optional[dict]=None) -> str:
+        pass
+
+    @abstractmethod
+    def buffer(self, distance: Numeric, **kwargs) -> Self:
+        pass
+
+    @abstractmethod
+    def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
+        pass
+
+class GlyphPathEmpty(GlyphPathBase):
+    def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
+        return type(self)()
+
+    def scale(self, xfact:Numeric=1, yfact:Numeric=1) -> Self:
+        return type(self)()
+
+    def translate(self, xoff:Numeric=0, yoff:Numeric=0) -> Self:
+        return type(self)()
+
+    def bbox(self) -> BBox:
+        return BBox(0, 0, 0, 0)
+
+    def svg(self, attributes: Optional[dict]=None) -> str:
+        return ""
+
+    def buffer(self, distance: Numeric, **kwargs) -> Self:
+        return type(self)()
+
+    def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
+        return Polygon()
+
+class GlyphPath(GlyphPathBase):
     svg_template = """<path {} d="{}" />"""
 
     @classmethod
     def from_outline(cls, outline: ft.Outline):
         path_builder = PathBuilder.from_outline(outline)
-        return cls(path_builder.get_path())
-    
+        path = path_builder.get_path()
+
+        if path:
+            return GlyphPath(path)
+        else:
+            return GlyphPathEmpty()
+        
     @classmethod
-    def from_shapely(cls, shape: Union[Polygon, MultiPolygon]):
+    def from_shapely(cls, shape: Union[Polygon, MultiPolygon], inverted:bool=False):
         path_builder = PathBuilder.from_shapely(shape)
-        return cls(path_builder.get_path())
 
+        path = path_builder.get_path()
 
-    def __init__(self, path):
+        if path:
+            return GlyphPath(path, inverted)
+        else:
+            return GlyphPathEmpty()
+
+    def __init__(self, path:MPLPath, inverted:bool=False):
         # we're using matplptlib.path.Path as the internal representation of the path
         self._path = path
+        self._inverted = inverted
     
-    def transform(self, t) -> Self:
+    def transform(self, t: Annotated[Iterable[Numeric], 6]) -> Self:
 
         # transform the path per the following affine transform
         # a  b  c
@@ -118,6 +178,13 @@ class GlyphPath(ABC):
         # 0  0  1
 
         a, b, c, d, e, f = t
+
+        new_inverted = self._inverted
+
+        # if any of a, b, d, e are negative then the polygons become inverted and cw becomes ccw and ccw becomes cw.
+        for factor in [a, b, d, e]:
+            if factor < 0:
+                new_inverted = not new_inverted
 
         # MPL uses a different order of [abcdef] than I do, so translate
         # a  c  e
@@ -130,7 +197,14 @@ class GlyphPath(ABC):
                                          e=c,
                                          f=f)
 
-        return type(self)(self._path.transformed(transform))
+        return type(self)(self._path.transformed(transform), inverted=new_inverted)
+    
+
+    def scale(self, xfact: Numeric=1.0, yfact: Numeric=1.0):
+        return self.transform([xfact, 0, 0, 0, yfact, 0])
+    
+    def translate(self, xoff:Numeric=0, yoff:Numeric=0):
+        return self.transform([1, 0, xoff, 0, 1, yoff])
 
     def bbox(self) -> BBox:
         mpl_bbox = self._path.get_extents()
@@ -140,7 +214,7 @@ class GlyphPath(ABC):
                     ymin=mpl_bbox.ymin,
                     ymax=mpl_bbox.ymax)
 
-    def mpl_path(self) -> MPLPath:
+    def _mpl_path(self) -> MPLPath:
         return self._path
 
     def svg(self, attributes: Optional[dict]=None) -> str:
@@ -175,7 +249,12 @@ class GlyphPath(ABC):
 
         return self.svg_template.format(attributes_str, " ".join(moves))
 
-    def shapely_polygon(self):
+    def buffer(self, distance: Numeric, **kwargs):
+        shapely_representation = self.shapely_polygon()
+        buffered = shapely_representation.buffer(distance=distance, **kwargs)
+        return type(self).from_shapely(buffered, self._inverted)
+
+    def shapely_polygon(self) -> Union[Polygon, MultiPolygon]:
         # MPL path to_polygons returns a list of list of coordinates
         if self._path:
             coord_list = self._path.to_polygons()
@@ -185,11 +264,11 @@ class GlyphPath(ABC):
         polygons = []
         for coords in coord_list:
             # make a shapely LinearRing so we can test direction
-            lr = LinearRing(coords)
+            lr = LinearRing(coords) # type:ignore
 
             # TrueType font spec: clockwise contours are outlines, anti-clockwise contours are holes.
             # Any anti-clockwise contour is a hole for the previous clockwise contour.
-            if lr.is_ccw:
+            if ((not self._inverted) and lr.is_ccw) or (self._inverted and (not lr.is_ccw)):
                 # this coord list is for an interior hole belonging to the previous exterior
 
                 # get the previous polygon (the pevious exterior, with any interiors)
@@ -221,14 +300,16 @@ if __name__ == "__main__":
 
     gp = GlyphPath.from_outline(outline)
 
-    gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
+    # gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
+
+    from shapely import BufferJoinStyle as BJS
 
     if True:
         import matplotlib.pyplot as plt
         from shapely.plotting import plot_polygon
         from itertools import chain
         from shapely import BufferCapStyle as BCS
-        from shapely import BufferJoinStyle as BJS
+
 
         cap_styles  = [('round',  BCS.round),
                        ('square', BCS.square),
@@ -248,18 +329,19 @@ if __name__ == "__main__":
         fig.show()
 
 
-    if False:
+    if True:
         a = gp.shapely_polygon()
         
         b = GlyphPath.from_shapely(a)
 
         scale = 0.05
-        b = b.transform([-scale, 0, b.bbox().xmax*scale, 0, -scale, b.bbox().ymax*scale])
+        b = b.transform([scale, 0, b.bbox().xmin*scale, 0, -scale, b.bbox().ymax*scale])
 
 
         svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
         <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox().xmax}" height="{b.bbox().ymax}">
             {b.svg(attributes={"fill": "rgb(52, 92, 161)"})}
+            {b.buffer(-25, join_style=BJS.mitre).svg(attributes={"fill": "rgb(249, 201, 50)"})}
         </svg>
         """
 
