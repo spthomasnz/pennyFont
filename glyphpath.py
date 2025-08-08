@@ -115,6 +115,7 @@ class GlyphPathBase(ABC):
         pass
 
     @abstractmethod
+    @property
     def bbox(self) -> BBox:
         pass
 
@@ -241,6 +242,7 @@ class GlyphPath(GlyphPathBase):
     def translate(self, xoff: Numeric = 0, yoff: Numeric = 0):
         return self.transform([1, 0, xoff, 0, 1, yoff])
 
+    @property
     def bbox(self) -> BBox:
         mpl_bbox = self._path.get_extents()
 
@@ -330,7 +332,7 @@ if __name__ == "__main__":
 
     gp = GlyphPath.from_face(face, "8", 15000)
 
-    gp = gp.transform([1, 0, -gp.bbox().xmin, 0, 1, -gp.bbox().ymin])
+    gp = gp.transform([1, 0, -gp.bbox.xmin, 0, 1, -gp.bbox.ymin])
 
     from shapely import BufferJoinStyle
 
@@ -339,10 +341,10 @@ if __name__ == "__main__":
         b = GlyphPath.from_shapely(a)
 
         scale = 0.05
-        b = b.transform([scale, 0, b.bbox().xmin * scale, 0, -scale, b.bbox().ymax * scale])
+        b = b.transform([scale, 0, b.bbox.xmin * scale, 0, -scale, b.bbox.ymax * scale])
 
         svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-        <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox().xmax}" height="{b.bbox().ymax}">
+        <svg xmlns="http://www.w3.org/2000/svg" width="{b.bbox.xmax}" height="{b.bbox.ymax}">
             {b.svg(attributes={"fill": "rgb(52, 92, 161)"})}
             {b.buffer(-25, join_style=BufferJoinStyle.mitre).svg(attributes={"fill": "rgb(249, 201, 50)"})}
         </svg>

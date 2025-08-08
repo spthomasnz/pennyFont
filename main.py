@@ -29,7 +29,7 @@ for letter in text:
     # get desired glyph from face
     outer_glyph = GlyphPath.from_outline(face.glyph.outline)
 
-    #shift the ascender to baseline (0) - this puts y coordinated into negative
+    # shift the ascender to baseline (0) - this puts y coordinated into negative
     outer_glyph = outer_glyph.translate(yoff=-face.size.ascender)
 
     # SVG has origin (0, 0) at the top left corner, so everything needs to be flipped in y
@@ -42,7 +42,7 @@ for letter in text:
     outer_glyph = outer_glyph.scale(xfact=scale_factor, yfact=scale_factor)
     inner_glyph = inner_glyph.scale(xfact=scale_factor, yfact=scale_factor)
 
-    bounds = outer_glyph.bbox()
+    bounds = outer_glyph.bbox
     outer_glyph = outer_glyph.translate(xoff=x_pos[-1])
     inner_glyph = inner_glyph.translate(xoff=x_pos[-1])
 
@@ -52,10 +52,10 @@ for letter in text:
     inner_paths.append(inner_glyph)
 
 
-outer_max_height = max([x.bbox().ymax for x in outer_paths])
+outer_max_height = max([x.bbox.ymax for x in outer_paths])
 # inner_paths = [inner.translate(yoff=outer_max_height + y_spacing) for inner in inner_paths]
 
-inner_max_height = max([x.bbox().ymax for x in inner_paths])
+inner_max_height = max([x.bbox.ymax for x in inner_paths])
 
 max_height = max(inner_max_height, outer_max_height)
 
@@ -70,7 +70,7 @@ svg = "\n\t".join([group_template.format(outer.svg(attributes={"fill": "rgb(52, 
 
 
 svg_template = f"""<?xml version="1.0" encoding="UTF-8" standalone="no"?>
-<svg xmlns="http://www.w3.org/2000/svg" width="{outer_paths[-1].bbox().xmax/dpmm}mm" height="{max_height/dpmm}mm">
+<svg xmlns="http://www.w3.org/2000/svg" width="{outer_paths[-1].bbox.xmax/dpmm}mm" height="{max_height/dpmm}mm">
     {svg}
 </svg>
 """
@@ -79,5 +79,5 @@ with open("glyph.svg", "w") as f:
     f.write(svg_template)
 
 print("SVG written.")
-print(f"Width:  {outer_paths[-1].bbox().xmax/dpmm} mm")
+print(f"Width:  {outer_paths[-1].bbox.xmax/dpmm} mm")
 print(f"Height: {max_height/dpmm} mm")

@@ -23,7 +23,7 @@ styles = [(x, y) for x in cap_styles for y in join_styles]
 
 gp = GlyphPath.from_face("pokemon_solid-webfont.ttf", "8", 15000)
 
-gp = gp.transform([1, 0, -gp.bbox().xmin,0, 1, -gp.bbox().ymin]) 
+gp = gp.transform([1, 0, -gp.bbox.xmin,0, 1, -gp.bbox.ymin])
 
 
 fig, axs = plt.subplots(nrows=3, ncols=3)
